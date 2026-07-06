@@ -1,0 +1,208 @@
+// grades.cpp
+#include "grades.h"
+#include "attendance.h"
+#include "filehandler.h"
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+using namespace std;
+
+// Find best 3 of 5 quiz marks by removing two lowest
+double bestThree(double q[], int n) {
+  double temp[5];
+  for (int i = 0; i < n; i++)
+    temp[i] = q[i];
+
+  for (int r = 0; r < 2; r++) {
+    int minIdx = 0;
+    for (int i = 1; i < n; i++)
+      if (temp[i] < temp[minIdx])
+        minIdx = i;
+    temp[minIdx] = -1;
+  }
+
+  double sum = 0;
+  int used = 0;
+  for (int i = 0; i < n; i++)
+    if (temp[i] >= 0) {
+      sum += temp[i];
+      used++;
+    }
+  return (used > 0) ? sum / used : 0;
+}
+
+// quiz*0.10 + asgn*0.10 + mid*0.30 + final*0.50
+double weightedTotal(double quiz, double asgn, double mid, double final_) {
+  return quiz * 0.10 + asgn * 0.10 + mid * 0.30 + final_ * 0.50;
+}
+
+string letterGrade(double total) {
+  if (total >= 85)
+    return "A";
+  if (total >= 80)
+    return "B+";
+  if (total >= 70)
+    return "B";
+  if (total >= 65)
+    return "C+";
+  if (total >= 60)
+    return "C";
+  if (total >= 50)
+    return "D";
+  return "F";
+}
+
+double gradePoints(string letter) {
+  if (letter == "A")
+    return 4.0;
+  if (letter == "B+")
+    return 3.5;
+  if (letter == "B")
+    return 3.0;
+  if (letter == "C+")
+    return 2.5;
+  if (letter == "C")
+    return 2.0;
+  if (letter == "D")
+    return 1.0;
+  return 0.0;
+}
+
+void enterMarks() {
+  string roll, code, sem;
+  cout << "\n--- Enter Marks ---" << endl;
+  cout << "Roll: ";
+  cin >> roll;
+  cout << "Course: ";
+  cin >> code;
+  cout << "Semester: ";
+  cin >> sem;
+
+  double q[5];
+  cout << "Enter 5 quiz marks (0-100):" << endl;
+  for (int i = 0; i < 5; i++) {
+    cout << "  Quiz " << i + 1 << ": ";
+    cin >> q[i];
+    if (q[i] < 0 || q[i] > 100)
+      q[i] = 0;
+  }
+
+  double quizAvg = bestThree(q, 5);
+  double asgn, mid, final_;
+  cout << "Assignment (0-100): ";
+  cin >> asgn;
+  cout << "Mid (0-40): ";
+  cin >> mid;
+  cout << "Final (0-60): ";
+  cin >> final_;
+
+  double total = weightedTotal(quizAvg, asgn, mid, final_);
+  string letter = letterGrade(total);
+
+  cout << "Total: " << total << " | Grade: " << letter << endl;
+
+  stringstream ss;
+  string qStr, aStr, mStr, fStr, tStr;
+  ss << quizAvg;
+  qStr = ss.str();
+  ss.str("");
+  ss << asgn;
+  aStr = ss.str();
+  ss.str("");
+  ss << mid;
+  mStr = ss.str();
+  ss.str("");
+  ss << final_;
+  fStr = ss.str();
+  ss.str("");
+  ss << total;
+  tStr = ss.str();
+
+  appendFile("grades.txt", roll + "," + code + "," + qStr + "," + aStr + "," +
+                               mStr + "," + fStr + "," + tStr + "," + letter);
+  cout << "Saved!" << endl;
+}
+
+double semesterGPA(string roll, string sem) {
+  double totalPts = 0;
+  int totalCr = 0;
+
+  readFile("enrollments.txt");
+  string courses[100];
+  int courseCount = 0;
+  for (int i = 0; i < rowCount; i++) {
+    if (fileData[i][0] == roll && fileData[i][2] == sem &&
+        fileData[i][3] == "enrolled") {
+      courses[courseCount++] = fileData[i][1];
+    }
+  }
+
+  for (int ci = 0; ci < courseCount; ci++) {
+    string c = courses[ci];
+    readFile("grades.txt");
+    for (int g = 0; g < rowCount; g++) {
+      if (fileData[g][0] == roll && fileData[g][1] == c) {
+        string savedLetter = fileData[g][7];
+        readFile("courses.txt");
+        for (int k = 0; k < rowCount; k++) {
+          if (fileData[k][0] == c) {
+            int cr = 0;
+            stringstream(fileData[k][2]) >> cr;
+            totalPts += gradePoints(savedLetter) * cr;
+            totalCr += cr;
+            break;
+          }
+        }
+        break;
+      }
+    }
+  }
+  return (totalCr > 0) ? totalPts / totalCr : 0;
+}
+
+void classStats(string code) {
+  readFile("grades.txt");
+  double highest = -1, lowest = 101, sum = 0;
+  int count = 0;
+
+  for (int i = 0; i < rowCount; i++) {
+    if (fileData[i][1] == code) {
+      double t = 0;
+      stringstream(fileData[i][6]) >> t;
+      count++;
+      if (t > highest)
+        highest = t;
+      if (t < lowest)
+        lowest = t;
+      sum += t;
+    }
+  }
+  if (count == 0) {
+    cout << "No grades." << endl;
+    return;
+  }
+
+  cout << "\nStats for " << code << ":" << endl;
+  cout << "Highest: " << highest << endl;
+  cout << "Lowest:  " << lowest << endl;
+  cout << "Mean:    "  << sum / count << endl;
+}
+
+void attendancePenalty(string roll, string code) {
+  double pct = getAttendancePct(roll, code);
+  if (pct < 75.0) {
+    readFile("grades.txt");
+    for (int i = 0; i < rowCount; i++) {
+      if (fileData[i][0] == roll && fileData[i][1] == code) {
+        fileData[i][7] = "F";
+        cout << "Penalty: " << roll << " -> F (attendance " << pct << "%)"
+             << endl;
+        break;
+      }
+    }
+    writeFile("grades.txt",
+              "roll,course_code,quiz_avg,asgn,mid,final,total,letter");
+  } else {
+    cout << "OK (" << pct << "%)" << endl;
+  }
+}
