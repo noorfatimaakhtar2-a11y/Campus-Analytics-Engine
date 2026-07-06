@@ -1,0 +1,111 @@
+// attendance.cpp
+#include "attendance.h"
+#include "filehandler.h"
+#include <iostream>
+#include <fstream>
+using namespace std;
+
+string backupContent = "";
+
+void saveBackup() {
+    ifstream f("attendance_log.txt");
+    backupContent = "";
+    string line;
+    bool skip = true;
+    while (getline(f, line)) {
+        if (skip) { skip = false; continue; }
+        backupContent += line + "\n";
+    }
+    f.close();
+}
+
+void markAttendance(string code, string sem, string date) {
+    readFile("enrollments.txt");
+    saveBackup();
+    bool any = false;
+
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][1] == code && fileData[i][2] == sem && fileData[i][3] == "enrolled") {
+            char s;
+            cout << fileData[i][0] << " (P/A/L): ";
+            cin >> s;
+
+            string status = "A";
+            if (s == 'P' || s == 'p') status = "P";
+            else if (s == 'L' || s == 'l') status = "L";
+
+            appendFile("attendance_log.txt", fileData[i][0] + "," + code + "," + date + "," + status);
+            any = true;
+        }
+    }
+    if (any) cout << "Marked!" << endl;
+    else cout << "No students." << endl;
+}
+
+// Formula: (present + 0.5 * late) / total * 100
+double getAttendancePct(string roll, string code) {
+    readFile("attendance_log.txt");
+    int present = 0, late = 0, total = 0;
+
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][0] == roll && fileData[i][1] == code) {
+            total++;
+            if (fileData[i][3] == "P") present++;
+            else if (fileData[i][3] == "L") late++;
+        }
+    }
+    if (total == 0) return 0.0;
+    return (present + 0.5 * late) / total * 100.0;
+}
+
+void shortageList(string code) {
+    readFile("enrollments.txt");
+    string rolls[300];
+    int count = 0;
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][1] == code && fileData[i][3] == "enrolled") {
+            rolls[count++] = fileData[i][0];
+        }
+    }
+    bool found = false;
+    for (int i = 0; i < count; i++) {
+        double pct = getAttendancePct(rolls[i], code);
+        if (pct > 0 && pct < 75.0) {
+            cout << rolls[i] << " - " << pct << "%" << endl;
+            found = true;
+        }
+    }
+    if (!found) cout << "None found." << endl;
+}
+
+void printSheet(string code, string date) {
+    readFile("enrollments.txt");
+    string rolls[300];
+    int count = 0;
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][1] == code && fileData[i][3] == "enrolled") {
+            rolls[count++] = fileData[i][0];
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        string status = "Not Marked";
+        readFile("attendance_log.txt");
+        for (int j = 0; j < rowCount; j++) {
+            if (fileData[j][0] == rolls[i] && fileData[j][1] == code && fileData[j][2] == date) {
+                status = fileData[j][3]; break;
+            }
+        }
+        cout << rolls[i] << " - " << status << endl;
+    }
+}
+
+bool undoAttendance() {
+    if (backupContent == "") { cout << "Nothing to undo!" << endl; return false; }
+    ofstream f("attendance_log.txt");
+    f << "roll,course_code,date,status" << endl;
+    f << backupContent;
+    f.close();
+    backupContent = "";
+    cout << "Undone!" << endl;
+    return true;
+}
