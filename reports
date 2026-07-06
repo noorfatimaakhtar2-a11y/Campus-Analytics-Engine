@@ -1,0 +1,117 @@
+// reports.cpp
+#include "reports.h"
+#include "filehandler.h"
+#include "grades.h"
+#include "attendance.h"
+#include "fee_tracker.h"
+#include <iostream>
+#include <iomanip>
+#include <sstream>
+using namespace std;
+
+void meritList() {
+    readFile("students.txt");
+    cout << "\n===== MERIT LIST =====" << endl;
+    cout << "Roll         | Name           | CGPA" << endl;
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][4] == "active") {
+            cout << fileData[i][0] << " | " << fileData[i][1] << " | " << fileData[i][3] << endl;
+        }
+    }
+}
+
+void attendDefaulters() {
+    readFile("enrollments.txt");
+    cout << "\n=== ATTENDANCE DEFAULTERS (< 75%) ===" << endl;
+
+    string rolls[300], codes[300];
+    int count = 0;
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][3] == "enrolled") {
+            rolls[count] = fileData[i][0];
+            codes[count] = fileData[i][1];
+            count++;
+        }
+    }
+
+    bool found = false;
+    for (int i = 0; i < count; i++) {
+        double pct = getAttendancePct(rolls[i], codes[i]);
+        if (pct > 0 && pct < 75.0) {
+            cout << rolls[i] << " | " << codes[i] << " | " << fixed << setprecision(1) << pct << "%" << endl;
+            found = true;
+        }
+    }
+    if (!found) cout << "None found." << endl;
+}
+
+void feeDefaulters() {
+    showDefaulters();
+}
+
+void semesterResult(string sem) {
+    readFile("enrollments.txt");
+    cout << "\n===== RESULT: " << sem << " =====" << endl;
+
+    string rolls[300], codes[300];
+    int count = 0;
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][2] == sem && fileData[i][3] == "enrolled") {
+            rolls[count] = fileData[i][0];
+            codes[count] = fileData[i][1];
+            count++;
+        }
+    }
+
+    for (int i = 0; i < count; i++) {
+        string grade = "-";
+        readFile("grades.txt");
+        for (int j = 0; j < rowCount; j++) {
+            if (fileData[j][0] == rolls[i] && fileData[j][1] == codes[i]) {
+                grade = fileData[j][7]; break;
+            }
+        }
+        cout << rolls[i] << " | " << codes[i] << " | " << grade << endl;
+    }
+}
+
+// Count students per department using parallel arrays
+void deptSummary() {
+    readFile("students.txt");
+
+    string depts[20];
+    int counts[20], pass[20];
+    double cgpaSum[20];
+    int nd = 0;
+
+    for (int i = 0; i < rowCount; i++) {
+        if (fileData[i][4] != "active") continue;
+        string d = fileData[i][2];
+        double c = 0;
+        stringstream(fileData[i][3]) >> c;
+
+        int idx = -1;
+        for (int j = 0; j < nd; j++)
+            if (depts[j] == d) { idx = j; break; }
+
+        if (idx == -1) {
+            depts[nd] = d;
+            counts[nd] = 0;
+            cgpaSum[nd] = 0;
+            pass[nd] = 0;
+            idx = nd;
+            nd++;
+        }
+
+        counts[idx]++;
+        cgpaSum[idx] += c;
+        if (c >= 2.0) pass[idx]++;
+    }
+
+    cout << "\n===== DEPARTMENT SUMMARY =====" << endl;
+    for (int i = 0; i < nd; i++) {
+        double avg = cgpaSum[i] / counts[i];
+        double pr = (double)pass[i] / counts[i] * 100.0;
+        cout << depts[i] << " | " << counts[i] << " students | Avg: " << fixed << setprecision(2) << avg << " | Pass: " << setprecision(1) << pr << "%" << endl;
+    }
+}
